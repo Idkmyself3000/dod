@@ -4,9 +4,50 @@ import useSocket, { socket } from './useSocket';
 const GameContext = createContext();
 
 export function GameProvider({ children }) {
-  const [localMeta, setLocalMeta] = useState({ myTeamId: null, isOrganizer: false, incomingAttack: null });
+  const [localMeta, setLocalMeta] = useState(() => {
+    const saved = localStorage.getItem('dod_session');
+    const parsed = saved ? JSON.parse(saved) : null;
+    return {
+      myTeamId: parsed?.myTeamId || null,
+      roomCode: parsed?.roomCode || null,
+      displayName: parsed?.displayName || null,
+      isOrganizer: parsed?.isOrganizer || false,
+      incomingAttack: null 
+    };
+  });
   const [rawState, setRawState] = useState(null);
   const [gameState, setGameState] = useState(null);
+
+  // Sync session to localStorage
+  useEffect(() => {
+    const { incomingAttack, ...toSave } = localMeta;
+    localStorage.setItem('dod_session', JSON.stringify(toSave));
+  }, [localMeta]);
+
+  // Auto-rejoin logic
+  useEffect(() => {
+    const onConnect = () => {
+      if (localMeta.isOrganizer && localMeta.roomCode) {
+        socket.emit("organizer_join", { 
+          roomCode: localMeta.roomCode, 
+          authKey: 'prometheus-admin-2024' 
+        });
+      } else if (localMeta.myTeamId && localMeta.roomCode) {
+        socket.emit("join_room", { 
+          teamId: localMeta.myTeamId, 
+          roomCode: localMeta.roomCode, 
+          displayName: localMeta.displayName 
+        });
+      }
+    };
+
+    socket.on("connect", onConnect);
+    if (socket.connected) onConnect();
+
+    return () => {
+      socket.off("connect", onConnect);
+    };
+  }, [localMeta.isOrganizer, localMeta.myTeamId, localMeta.roomCode, localMeta.displayName]);
 
   const handleStateUpdate = useCallback((serverState) => {
     setRawState(serverState);
@@ -31,6 +72,7 @@ export function GameProvider({ children }) {
   const handleRoomError = useCallback((err) => {
     console.error("Room Error:", err);
     if (err.code === "GAME_RESET") {
+      localStorage.removeItem('dod_session');
       setRawState(null);
       setGameState(null);
       window.location.href = "/"; // Force a full clean redirect
@@ -94,7 +136,7 @@ export function GameProvider({ children }) {
 
   // Client Actions
   const joinRoom = (teamId, roomCode, displayName) => {
-    setLocalMeta(prev => ({ ...prev, myTeamId: teamId }));
+    setLocalMeta(prev => ({ ...prev, myTeamId: teamId, roomCode, displayName }));
     socket.emit("join_room", { teamId, roomCode, displayName });
   };
 
@@ -108,7 +150,7 @@ export function GameProvider({ children }) {
 
       socket.emit("submit_answer", {
         teamId: localMeta.myTeamId,
-        roomCode: rawState?.roomCode,
+        roomCode: rawState?.roomCode || localMeta.roomCode,
         puzzleId: rawState?.teams[localMeta.myTeamId]?.currentPuzzle?.id,
         answer
       });
@@ -123,7 +165,7 @@ export function GameProvider({ children }) {
     socket.emit("launch_attack", {
       fromTeamId: localMeta.myTeamId,
       targetTeamId,
-      roomCode: rawState?.roomCode
+      roomCode: rawState?.roomCode || localMeta.roomCode
     });
   };
 
@@ -131,7 +173,7 @@ export function GameProvider({ children }) {
     if (localMeta.incomingAttack) {
       socket.emit("submit_defense", {
         teamId: localMeta.myTeamId,
-        roomCode: rawState?.roomCode,
+        roomCode: rawState?.roomCode || localMeta.roomCode,
         attackId: localMeta.incomingAttack.id,
         answer
       });
@@ -157,7 +199,7 @@ export function GameProvider({ children }) {
 
       socket.emit("request_hint", {
         teamId: localMeta.myTeamId,
-        roomCode: rawState?.roomCode
+        roomCode: rawState?.roomCode || localMeta.roomCode
       });
 
       // Timeout fallback — also cleans up the listener
@@ -173,14 +215,14 @@ export function GameProvider({ children }) {
 
   // Organizer controls
   const organizerJoin = (roomCode, authKey) => {
-    setLocalMeta(prev => ({ ...prev, isOrganizer: true }));
+    setLocalMeta(prev => ({ ...prev, isOrganizer: true, roomCode }));
     socket.emit("organizer_join", { roomCode, authKey });
   };
 
   const organizerSend = (command, payload = {}) => {
     const authKey = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.VITE_ORGANIZER_KEY : null;
     socket.emit("organizer_cmd", {
-      roomCode: rawState?.roomCode,
+      roomCode: rawState?.roomCode || localMeta.roomCode,
       authKey: authKey || 'prometheus-admin-2024',
       command,
       payload
