@@ -4,7 +4,6 @@ export class BattleManager {
   static get COSTS() {
     return {
       ATTACK: 5,
-      SHIELD: 3,
       GAMBLE: 3
     };
   }
@@ -15,7 +14,7 @@ export class BattleManager {
       fromTeam: fromTeamId,
       toTeam: targetTeamId,
       defPuzzleId: puzzleId,
-      deadline: Date.now() + 60000 // 60 seconds
+      deadline: Date.now() + 30000 // 30 seconds to defend
     };
   }
 
@@ -23,8 +22,7 @@ export class BattleManager {
     return pendingAttacks.some(a => a.toTeam === teamId);
   }
 
-  static validateAttack(team, targetTeam, pendingAttacks, attacksAllowed, safeZoneActive) {
-    if (!attacksAllowed) return { valid: false, error: "Attacks not allowed in this round" };
+  static validateAttack(team, targetTeam, pendingAttacks, safeZoneActive) {
     if (safeZoneActive) return { valid: false, error: "Safe zone is active" };
     if (team.tokens < this.COSTS.ATTACK) return { valid: false, error: "Not enough tokens" };
     if (!targetTeam || targetTeam.status === 'eliminated') return { valid: false, error: "Target eliminated or invalid" };

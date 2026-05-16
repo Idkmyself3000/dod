@@ -5,25 +5,36 @@ const PHASES = ['LOBBY', 'EARLY', 'MID', 'FINAL', 'SUDDEN DEATH', 'ENDED'];
 export default function PhaseController({ currentPhase, onAdvance }) {
   const currentIndex = PHASES.indexOf(currentPhase);
 
+  const getPhaseClass = (phase, i) => {
+    let base = 'round-bar-phase ';
+    
+    if (i === currentIndex) {
+      if (phase === 'SUDDEN DEATH') return base + 'phase-badge-sudden';
+      if (phase === 'ENDED') return base + 'text-muted';
+      return base + 'phase-badge-active';
+    }
+    
+    if (i < currentIndex) {
+      return base + 'text-muted';
+    }
+    
+    return base; // default upcoming
+  };
+
   return (
-    <div style={{ marginBottom: '32px' }}>
-      <div className="mono text-muted uppercase" style={{ fontSize: '12px', marginBottom: '16px' }}>
-        PHASE CONTROLLER
+    <div className="surface-iron organizer-control-panel" style={{ marginBottom: '32px' }}>
+      <div className="text-h2" style={{ marginBottom: '16px' }}>
+        Phase Controller
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '8px', marginBottom: '16px' }}>
+      
+      <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '8px', marginBottom: '24px' }}>
         {PHASES.map((phase, i) => (
           <React.Fragment key={phase}>
-            <div className="mono uppercase" style={{
-              padding: '4px 8px',
-              fontSize: '10px',
-              border: `1px solid ${i === currentIndex ? 'var(--color-primary)' : 'var(--color-border)'}`,
-              color: i === currentIndex ? 'var(--color-primary)' : (i < currentIndex ? 'var(--color-text-secondary)' : 'var(--color-text-muted)'),
-              backgroundColor: i === currentIndex ? 'rgba(200, 169, 110, 0.1)' : 'transparent',
-            }}>
+            <div className={getPhaseClass(phase, i)} style={i > currentIndex ? { borderColor: 'var(--steel-dark)', color: 'var(--steel-light)' } : {}}>
               {phase}
             </div>
             {i < PHASES.length - 1 && (
-              <div style={{ color: 'var(--color-border)', fontSize: '10px' }}>→</div>
+              <div style={{ color: 'var(--steel-dark)', fontSize: '12px' }}>→</div>
             )}
           </React.Fragment>
         ))}
@@ -34,19 +45,10 @@ export default function PhaseController({ currentPhase, onAdvance }) {
           if (currentIndex < PHASES.length - 1) onAdvance(PHASES[currentIndex + 1]);
         }}
         disabled={currentIndex >= PHASES.length - 1}
-        className="mono uppercase"
-        style={{
-          width: '100%',
-          padding: '16px',
-          backgroundColor: 'var(--color-primary)',
-          color: 'var(--color-bg)',
-          fontWeight: 'bold',
-          transition: 'background-color 0.2s'
-        }}
-        onMouseEnter={(e) => !e.currentTarget.disabled && (e.currentTarget.style.backgroundColor = 'var(--color-primary-hover)')}
-        onMouseLeave={(e) => !e.currentTarget.disabled && (e.currentTarget.style.backgroundColor = 'var(--color-primary)')}
+        className={currentIndex >= PHASES.length - 1 ? 'btn-primary btn-disabled' : 'btn-primary'}
+        style={{ width: '100%' }}
       >
-        ADVANCE PHASE
+        Advance Phase
       </button>
     </div>
   );

@@ -30,6 +30,12 @@ export function GameProvider({ children }) {
 
   const handleRoomError = useCallback((err) => {
     console.error("Room Error:", err);
+    if (err.code === "GAME_RESET") {
+      setRawState(null);
+      setGameState(null);
+      window.location.href = "/"; // Force a full clean redirect
+      return;
+    }
     alert(`Error: ${err.message}`);
   }, []);
 
@@ -48,6 +54,8 @@ export function GameProvider({ children }) {
       round: rawState.round,
       totalRounds: 7,
       safeZoneActive: rawState.safeZoneActive,
+      timeRemaining: rawState.timeRemaining,
+      gameStarted: rawState.gameStarted,
       myTeamId: localMeta.myTeamId,
       teams: teamsArray.map(t => ({
         id: t.id,
@@ -55,7 +63,9 @@ export function GameProvider({ children }) {
         tokens: t.tokens,
         lives: t.lives,
         status: t.status.toUpperCase(),
-        puzzlesSolved: t.solvedPuzzleIds ? t.solvedPuzzleIds.length : 0
+        lastTaunt: t.lastTaunt,
+        puzzlesSolved: t.solvedPuzzleIds ? t.solvedPuzzleIds.length : 0,
+        timeInGame: (Date.now() - (t.joinTime || Date.now())) / 1000
       })).sort((a,b) => b.tokens - a.tokens),
       recentEvents: (rawState.eventLog || []).map(e => ({
         id: e.id,
@@ -66,7 +76,7 @@ export function GameProvider({ children }) {
         id: myTeam.currentPuzzle.id,
         type: myTeam.currentPuzzle.type.toUpperCase(),
         text: myTeam.currentPuzzle.cipherText,
-        hint: myTeam.currentPuzzle.hint,
+        options: myTeam.currentPuzzle.options || [],
         progress: myTeam.currentPuzzleIndex,
         total: 7
       } : { type: 'STANDBY', text: 'AWAITING PHASE', progress: 0, total: 7 },
@@ -128,9 +138,38 @@ export function GameProvider({ children }) {
     }
   };
 
-  const activateShield = () => {
-    // optional logic not strictly defined in backend MVP
+  const requestHint = () => {
+    return new Promise((resolve) => {
+      let resolved = false;
+
+      const onResult = (res) => {
+        if (resolved) return;
+        resolved = true;
+        clearTimeout(timer);
+        if (res.success && res.hint) {
+          resolve({ success: true, hint: res.hint });
+        } else {
+          resolve({ success: false, hint: null });
+        }
+      };
+
+      socket.once("hint_result", onResult);
+
+      socket.emit("request_hint", {
+        teamId: localMeta.myTeamId,
+        roomCode: rawState?.roomCode
+      });
+
+      // Timeout fallback — also cleans up the listener
+      const timer = setTimeout(() => {
+        if (resolved) return;
+        resolved = true;
+        socket.off("hint_result", onResult);
+        resolve({ success: false, hint: null });
+      }, 5000);
+    });
   };
+
 
   // Organizer controls
   const organizerJoin = (roomCode, authKey) => {
@@ -150,7 +189,8 @@ export function GameProvider({ children }) {
 
   const organizer = {
     setPhase: (phaseOverride) => organizerSend('advance_phase', { phaseOverride }),
-    toggleSafeZone: () => organizerSend('toggle_safe_zone'),
+    startGame: (duration) => organizerSend('start_game', { duration }),
+    resetGame: () => organizerSend('reset_game'),
     updateTeamLives: (teamId, lives) => organizerSend('adjust_lives', { teamId, lives }),
     updateTeamTokens: (teamId, delta) => organizerSend('grant_tokens', { teamId, amount: delta }),
     eliminateTeam: (teamId) => organizerSend('eliminate_team', { teamId })
@@ -172,7 +212,7 @@ export function GameProvider({ children }) {
       submitAnswer, 
       launchAttack, 
       repelAttack,
-      activateShield,
+      requestHint,
       organizerJoin,
       organizer
     }}>

@@ -1,20 +1,22 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useGameState } from '../hooks/useGameState';
 import CipherPanel from '../components/CipherPanel';
 import AnswerInput from '../components/AnswerInput';
 import TokenBar from '../components/TokenBar';
-import TeamRoster from '../components/TeamRoster';
+import Leaderboard from '../components/Leaderboard';
 import SignalLog from '../components/SignalLog';
 import DefenseOverlay from '../components/DefenseOverlay';
 
 export default function TeamGamePage() {
-  const { gameState, submitAnswer, launchAttack, repelAttack, activateShield } = useGameState();
-  const [targetId, setTargetId] = useState(null);
+  const { gameState, submitAnswer, launchAttack, repelAttack, requestHint } = useGameState();
   const [flashedTarget, setFlashedTarget] = useState(null);
   const [isAnswerError, setIsAnswerError] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [attackSent, setAttackSent] = useState(false);
+  const [currentHint, setCurrentHint] = useState(null);
+  const [hintPuzzleId, setHintPuzzleId] = useState(null);
 
-  const myTeam = gameState.teams.find(t => t.id === gameState.myTeamId) || gameState.teams[0];
+  const myTeam = gameState.teams.find(t => t.id === gameState.myTeamId) || gameState.teams[0] || { name: '...', tokens: 0, lives: 0, status: 'ACTIVE' };
 
   const handleAnswerSubmit = async (answer) => {
     const correct = await submitAnswer(answer);
@@ -25,58 +27,132 @@ export default function TeamGamePage() {
       setIsAnswerError(true);
       setTimeout(() => setIsAnswerError(false), 300);
     }
+    return correct;
   };
 
-  const handleAttack = () => {
-    if (!targetId) {
-      alert("Please select a target team from the ACTIVE OPERATIVES list on the right by clicking their name first!");
-      return;
-    }
-    launchAttack(targetId);
-    setFlashedTarget(targetId);
-    setTimeout(() => setFlashedTarget(null), 300);
-    setTargetId(null);
+  const handleAttack = (targetIdToAttack) => {
+    launchAttack(targetIdToAttack);
+    setFlashedTarget(targetIdToAttack);
+    setAttackSent(true);
+    setTimeout(() => {
+      setFlashedTarget(null);
+      setAttackSent(false);
+    }, 400);
   };
 
   const handleRepel = (ans) => {
     repelAttack(ans);
   };
 
+  const handleRequestHint = async () => {
+    const result = await requestHint();
+    if (result.success) {
+      setCurrentHint(result.hint);
+      setHintPuzzleId(gameState.currentPuzzle.id);
+    }
+  };
+
+  // Clear hint when puzzle changes
+  const puzzleId = gameState.currentPuzzle?.id;
+  useEffect(() => {
+    if (hintPuzzleId && puzzleId !== hintPuzzleId) {
+      setCurrentHint(null);
+      setHintPuzzleId(null);
+    }
+  }, [puzzleId, hintPuzzleId]);
+
   if (myTeam.status === 'ELIMINATED') {
     return (
       <div style={{
         position: 'fixed',
         top: 0, left: 0, right: 0, bottom: 0,
-        backgroundColor: '#050000',
+        backgroundColor: '#000',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
         zIndex: 99999,
-        border: '4px solid var(--color-danger)'
+        border: '6px solid #FFF',
+        overflow: 'hidden',
       }}>
-        <div className="hazard-stripes" style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', opacity: 0.1, animation: 'glitch 0.2s infinite' }} />
-        <h1 className="mono text-danger uppercase" style={{ fontSize: '8vw', letterSpacing: '0.1em', animation: 'fadePulse 4s infinite', textAlign: 'center', zIndex: 2, margin: 0, textShadow: '0 0 20px rgba(192,57,43,0.8)' }}>
-          CONNECTION SEVERED
+        {/* Scanline overlay */}
+        <div style={{ 
+          position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, 
+          background: 'repeating-linear-gradient(0deg, rgba(255,255,255,0.03) 0px, rgba(255,255,255,0.03) 1px, transparent 1px, transparent 4px)',
+          pointerEvents: 'none', zIndex: 1 
+        }} />
+        
+        {/* Crossed swords */}
+        <div className="elim-icon" style={{ fontSize: '4rem', color: '#FF0000', marginBottom: '32px', zIndex: 2 }}>☠</div>
+        
+        {/* ELIMINATED */}
+        <h1 className="elim-title" style={{ 
+          fontFamily: "'Cinzel', serif",
+          fontSize: 'clamp(3rem, 10vw, 8rem)', 
+          fontWeight: 900,
+          color: '#FF0000',
+          letterSpacing: '0.15em', 
+          textAlign: 'center', 
+          zIndex: 2, 
+          margin: 0,
+          textTransform: 'uppercase',
+          lineHeight: 1,
+        }}>
+          ELIMINATED
         </h1>
-        <p className="mono text-danger uppercase" style={{ fontSize: '2vw', letterSpacing: '0.5em', opacity: 0.8, zIndex: 2, marginTop: '24px' }}>
-          OPERATIVE LIQUIDATED
+
+        {/* Divider */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '24px', margin: '40px 0', zIndex: 2, width: '60%', maxWidth: '700px' }}>
+          <div style={{ flex: 1, height: '3px', background: '#FFF' }} />
+          <span style={{ fontSize: '1.5rem', color: '#FFF' }}>⚔</span>
+          <div style={{ flex: 1, height: '3px', background: '#FFF' }} />
+        </div>
+        
+        {/* Main taunt */}
+        <p className="elim-taunt" style={{ 
+          fontFamily: "'Cinzel', serif",
+          fontSize: 'clamp(1.5rem, 5vw, 3.5rem)', 
+          fontWeight: 700,
+          color: '#FFF',
+          letterSpacing: '0.12em', 
+          textAlign: 'center', 
+          zIndex: 2, 
+          textTransform: 'uppercase',
+          lineHeight: 1.2,
+          maxWidth: '80%',
+        }}>
+          VICTORY WAS NEVER<br />MEANT FOR YOU
         </p>
-        <p className="mono text-muted uppercase" style={{ fontSize: '1vw', letterSpacing: '0.2em', marginTop: '48px', zIndex: 2 }}>
-          LIVES REMAINING: 0 // SYSTEM LOCKOUT
+        
+        {/* Footer */}
+        <p className="mono" style={{ 
+          fontSize: '0.8rem', 
+          letterSpacing: '0.4em', 
+          color: '#444',
+          marginTop: '64px', 
+          zIndex: 2,
+          textTransform: 'uppercase',
+        }}>
+          LIVES: 0 // TERMINATED // ARENA LOCKED
         </p>
+
         <style>{`
-          @keyframes fadePulse {
-            0%, 100% { opacity: 0.6; transform: scale(1); }
-            50% { opacity: 1; transform: scale(1.02); }
+          .elim-icon {
+            animation: skullPulse 2s ease-in-out infinite;
           }
-          @keyframes glitch {
-            0% { transform: translate(0); }
-            20% { transform: translate(-2px, 1px); }
-            40% { transform: translate(-1px, -1px); }
-            60% { transform: translate(2px, 1px); }
-            80% { transform: translate(1px, -1px); }
-            100% { transform: translate(0); }
+          @keyframes skullPulse {
+            0%, 100% { transform: scale(1); opacity: 0.8; }
+            50% { transform: scale(1.15); opacity: 1; }
+          }
+          .elim-title {
+            animation: elimFadeIn 1.5s ease-out both;
+          }
+          .elim-taunt {
+            animation: elimFadeIn 2s ease-out 0.5s both;
+          }
+          @keyframes elimFadeIn {
+            0% { opacity: 0; transform: translateY(20px); }
+            100% { opacity: 1; transform: translateY(0); }
           }
         `}</style>
       </div>
@@ -84,86 +160,277 @@ export default function TeamGamePage() {
   }
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', padding: 'var(--spacing-base)' }}>
+    <div className="surface-void" style={{ display: 'flex', minHeight: '100vh', padding: '24px', gap: '24px' }}>
       {gameState.incomingAttack && (
         <DefenseOverlay attackDetails={gameState.incomingAttack} onRepel={handleRepel} />
       )}
 
-      {/* Left Column 65% */}
-      <div style={{ width: '65%', paddingRight: '16px', display: 'flex', flexDirection: 'column' }}>
+      {/* Left Column — ARENA */}
+      <div style={{ width: '68%', display: 'flex', flexDirection: 'column', gap: '20px' }}>
         
-        {/* Top Bar */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-          <h1 className="mono text-gold uppercase" style={{ fontSize: '24px', margin: 0 }}>
-            {myTeam.name}
-          </h1>
-          <div className="mono text-muted" style={{ fontSize: '14px' }}>
-            ROUND {String(gameState.round).padStart(2, '0')} / {String(gameState.totalRounds).padStart(2, '0')}
+        {/* Status Bar */}
+        <div style={{ 
+          padding: '20px 28px', 
+          display: 'flex', 
+          justifyContent: 'space-between', 
+          alignItems: 'center',
+          border: '3px solid #FFF',
+          background: '#000',
+        }}>
+          <div>
+            <div className="text-label" style={{ marginBottom: '4px', fontSize: '0.6rem' }}>GLADIATOR</div>
+            <h1 style={{ 
+              margin: 0, 
+              fontFamily: "'Cinzel', serif", 
+              fontSize: '1.5rem', 
+              fontWeight: 900, 
+              color: '#FFF',
+              letterSpacing: '0.1em',
+              textTransform: 'uppercase',
+            }}>
+              {myTeam.name}
+            </h1>
           </div>
-          <div style={{ display: 'flex', gap: '4px' }}>
-            {[...Array(3)].map((_, i) => (
-              <span key={i} style={{ color: i < myTeam.lives ? 'var(--color-primary)' : 'var(--color-text-muted)' }}>
-                {i < myTeam.lives ? '●' : '○'}
-              </span>
-            ))}
+          
+          <div style={{ textAlign: 'center' }}>
+            <div className="text-label" style={{ marginBottom: '4px', fontSize: '0.6rem' }}>STATUS</div>
+            {gameState.gameStarted ? (
+              <div style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: '8px',
+                padding: '4px 12px',
+                border: '2px solid #FF0000',
+                background: 'rgba(255,0,0,0.1)',
+              }}>
+                <div className="status-pulse" style={{ width: 8, height: 8, background: '#FF0000' }} />
+                <span style={{ fontFamily: "'Cinzel', serif", fontSize: '0.75rem', fontWeight: 700, color: '#FF0000', letterSpacing: '0.2em' }}>ACTIVE</span>
+              </div>
+            ) : (
+              <span className="text-muted" style={{ fontFamily: "'Cinzel', serif", fontSize: '0.75rem', letterSpacing: '0.2em' }}>STANDBY</span>
+            )}
           </div>
-          <div className="mono text-gold uppercase">
-            ⬡ {myTeam.tokens} TOKENS
+
+          <div>
+            <div className="text-label" style={{ marginBottom: '6px', fontSize: '0.6rem', textAlign: 'right' }}>VITALITY</div>
+            <div className="lives-meter">
+              {[...Array(3)].map((_, i) => {
+                let className = 'pixel-heart';
+                if (i >= myTeam.lives) className += ' empty';
+                else if (myTeam.lives === 1) className += ' critical';
+                return <div key={i} className={className} />;
+              })}
+            </div>
+          </div>
+
+          <div style={{ textAlign: 'right' }}>
+            <div className="text-label" style={{ marginBottom: '4px', fontSize: '0.6rem' }}>TOKENS</div>
+            <div className="token-counter" style={{ 
+              fontFamily: "'Cinzel', serif", 
+              fontSize: '2rem', 
+              fontWeight: 900, 
+              color: '#FFF',
+              lineHeight: 1,
+            }}>
+              {myTeam.tokens}
+            </div>
           </div>
         </div>
 
-        {/* Puzzle Area */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+        {/* Main Puzzle Area */}
+        <div style={{ 
+          flex: 1, 
+          padding: '32px', 
+          display: 'flex', 
+          flexDirection: 'column', 
+          gap: '24px',
+          border: '3px solid #FFF',
+          background: '#000',
+          position: 'relative',
+        }}>
+          {/* Section Header */}
+          <div style={{ 
+            display: 'flex', 
+            justifyContent: 'space-between', 
+            alignItems: 'center',
+            paddingBottom: '16px', 
+            borderBottom: '2px solid #444' 
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <span style={{ fontSize: '1.25rem' }}>⚔</span>
+              <span style={{ fontFamily: "'Cinzel', serif", fontSize: '0.9rem', fontWeight: 700, letterSpacing: '0.15em', color: '#FFF' }}>
+                CHALLENGE {gameState.currentPuzzle.progress + 1}
+              </span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div className="mono" style={{ fontSize: '0.7rem', color: '#888', letterSpacing: '0.2em' }}>
+                SOLVED: {gameState.currentPuzzle.progress}/{gameState.currentPuzzle.total}
+              </div>
+            </div>
+          </div>
+
+          {/* Puzzle Display */}
           <CipherPanel 
             type={gameState.currentPuzzle.type} 
             text={gameState.currentPuzzle.text} 
-            hint={gameState.currentPuzzle.hint}
             isSuccess={isSuccess}
-          />
-          <AnswerInput 
-            onSubmit={handleAnswerSubmit} 
-            isError={isAnswerError}
+            hint={currentHint}
+            onRequestHint={handleRequestHint}
+            tokens={myTeam.tokens}
           />
           
-          {/* Progress Track */}
-          <div style={{ marginTop: '24px', display: 'flex', gap: '4px' }}>
-            {[...Array(gameState.currentPuzzle.total)].map((_, i) => {
-              const isCompleted = i < gameState.currentPuzzle.progress;
-              const isCurrent = i === gameState.currentPuzzle.progress;
-              return (
-                <div key={i} style={{
-                  flex: 1,
-                  height: '4px',
-                  backgroundColor: isCompleted ? 'var(--color-primary)' : 'var(--color-border)',
-                  animation: isCurrent ? 'blink 1s infinite step-end' : 'none'
-                }} />
-              );
-            })}
+          {/* Savage Taunt Display */}
+          {myTeam.lastTaunt && (
+            <div className="taunt-container" style={{
+              padding: '12px',
+              border: '2px solid #FF0000',
+              background: 'rgba(255,0,0,0.1)',
+              color: '#FF0000',
+              fontFamily: "'Barlow Condensed', sans-serif",
+              fontSize: '1rem',
+              fontWeight: 900,
+              textAlign: 'center',
+              letterSpacing: '0.1em',
+              animation: 'glitch 0.3s infinite',
+              marginBottom: '16px'
+            }}>
+              {myTeam.lastTaunt}
+            </div>
+          )}
+
+          {/* Answer Input */}
+          <div style={{ marginTop: 'auto' }}>
+            <AnswerInput 
+              onSubmit={handleAnswerSubmit} 
+              isError={isAnswerError}
+              options={gameState.currentPuzzle.options}
+            />
+            
+            {/* Progress Track */}
+            <div style={{ marginTop: '24px' }}>
+              <div style={{ display: 'flex', gap: '6px' }}>
+                {[...Array(gameState.currentPuzzle.total)].map((_, i) => {
+                  const isCompleted = i < gameState.currentPuzzle.progress;
+                  const isCurrent = i === gameState.currentPuzzle.progress;
+                  return (
+                    <div key={i} style={{
+                      flex: 1,
+                      height: '8px',
+                      background: isCompleted ? '#FFF' : '#222',
+                      border: isCurrent ? '2px solid #FFF' : 'none',
+                      transition: 'all 0.5s cubic-bezier(0.23, 1, 0.32, 1)',
+                      position: 'relative',
+                      overflow: 'hidden',
+                    }}>
+                      {isCurrent && (
+                        <div className="progress-pulse" style={{
+                          position: 'absolute',
+                          top: 0, left: 0, right: 0, bottom: 0,
+                          background: '#FFF',
+                          opacity: 0.3,
+                        }} />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Right Column 35% */}
-      <div style={{ width: '35%', paddingLeft: '16px', borderLeft: '1px solid var(--color-surface-raised)', display: 'flex', flexDirection: 'column' }}>
-        <TokenBar 
-          tokens={myTeam.tokens} 
-          onAttack={handleAttack} 
-          onShield={activateShield} 
-        />
-        <TeamRoster 
-          teams={gameState.teams} 
-          currentTeamId={gameState.myTeamId} 
-          selectedTargetId={targetId}
-          onSelectTarget={setTargetId}
-          flashedTarget={flashedTarget}
-        />
-        <SignalLog events={gameState.recentEvents} />
+      {/* Right Column — INTEL */}
+      <div style={{ width: '32%', display: 'flex', flexDirection: 'column', gap: '20px', position: 'relative' }}>
+        
+        {/* Attack Overlay */}
+        <div style={{
+          position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(255, 255, 255, 0.15)',
+          backdropFilter: 'blur(4px)',
+          display: attackSent ? 'flex' : 'none',
+          flexDirection: 'column',
+          alignItems: 'center', justifyContent: 'center',
+          zIndex: 100, pointerEvents: 'none',
+          animation: attackSent ? 'flashInOut 0.4s ease-out' : 'none',
+          border: '3px solid #FFF'
+        }}>
+          <h2 style={{ fontFamily: "'Cinzel', serif", fontSize: '1.5rem', fontWeight: 900, color: '#FFF', letterSpacing: '0.2em' }}>
+            ⚔ STRIKE LAUNCHED
+          </h2>
+        </div>
+
+        {/* Token Display */}
+        <div style={{ 
+          padding: '20px', 
+          border: '3px solid #FFF',
+          background: '#000',
+        }}>
+          <div className="text-label" style={{ marginBottom: '12px', fontSize: '0.6rem' }}>RESOURCES</div>
+          <TokenBar tokens={myTeam.tokens} />
+        </div>
+        
+        {/* Leaderboard */}
+        <div style={{ 
+          flex: 1, 
+          display: 'flex', 
+          flexDirection: 'column', 
+          overflow: 'hidden',
+          border: '3px solid #FFF',
+          background: '#000',
+        }}>
+          <div className="leaderboard-header">
+            <span style={{ fontSize: '1rem' }}>⚔</span>
+            <div className="leaderboard-title">ARENA RANKINGS</div>
+          </div>
+          <div style={{ flex: 1, overflowY: 'auto' }}>
+            <Leaderboard 
+              teams={gameState.teams} 
+              currentTeamId={gameState.myTeamId} 
+              myTokens={myTeam.tokens}
+              onAttack={handleAttack}
+              flashedTarget={flashedTarget}
+            />
+          </div>
+        </div>
+        
+        {/* Signal Log */}
+        <div style={{ 
+          height: '28%', 
+          padding: '16px',
+          border: '3px solid #FFF',
+          background: '#000',
+        }}>
+          <div className="text-label" style={{ marginBottom: '10px', fontSize: '0.6rem' }}>EVENT LOG</div>
+          <SignalLog events={gameState.recentEvents} />
+        </div>
       </div>
       
       <style>{`
         @keyframes blink {
           0%, 100% { opacity: 1; }
-          50% { opacity: 0; }
+          50% { opacity: 0.3; }
+        }
+        @keyframes flashInOut {
+          0% { opacity: 0; transform: scale(0.95); }
+          20% { opacity: 1; transform: scale(1.02); }
+          100% { opacity: 0; transform: scale(1); }
+        }
+        .status-pulse {
+          animation: statusPulse 1.5s ease-in-out infinite;
+        }
+        @keyframes statusPulse {
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50% { opacity: 0.3; transform: scale(0.8); }
+        }
+        .progress-pulse {
+          animation: progressPulse 1.2s ease-in-out infinite;
+        }
+        @keyframes progressPulse {
+          0%, 100% { opacity: 0.15; }
+          50% { opacity: 0.5; }
+        }
+        .token-counter {
+          transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
         }
       `}</style>
     </div>

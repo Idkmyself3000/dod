@@ -14,17 +14,24 @@ const httpServer = createServer(app);
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
 const allowedOrigins = [FRONTEND_URL, 'http://localhost:5173', 'http://127.0.0.1:5173'];
 
-app.use(cors({ origin: allowedOrigins }));
+app.use(cors({ origin: '*' }));
 app.use(express.json());
 
 const io = new Server(httpServer, {
   cors: {
-    origin: allowedOrigins,
+    origin: '*',
     methods: ["GET", "POST"]
   }
 });
 
 const rooms = new Map();
+
+// Initialize permanent room 'DOMAIN' for leaderboard display
+const domainRoom = new GameRoom("DOMAIN");
+// We need to set IO later once io is defined, or just do it here if io is already defined
+// In the file, io is defined above rooms.
+domainRoom.setIO(io);
+rooms.set("DOMAIN", domainRoom);
 
 // Helper to send error to a specific socket
 function sendError(socket, code, message) {
@@ -59,7 +66,11 @@ io.on('connection', (socket) => {
           nextPuzzle: result.nextPuzzle
         });
       } else {
-        emitToSocket(io, socket.id, "answer_result", { correct: false, tokensEarned: 0 });
+        emitToSocket(io, socket.id, "answer_result", { 
+          correct: false, 
+          tokensEarned: 0,
+          nextPuzzle: result.nextPuzzle 
+        });
       }
     } catch (err) {
       sendError(socket, "INTERNAL_ERROR", err.message);
@@ -111,6 +122,25 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on("request_hint", ({ teamId, roomCode }) => {
+    try {
+      const room = rooms.get(roomCode);
+      if (!room) {
+        emitToSocket(io, socket.id, "hint_result", { success: false, hint: null, error: "Room does not exist" });
+        return;
+      }
+
+      const result = room.requestHint(teamId);
+      emitToSocket(io, socket.id, "hint_result", { 
+        success: result.success, 
+        hint: result.hint || null,
+        error: result.error || null
+      });
+    } catch (err) {
+      emitToSocket(io, socket.id, "hint_result", { success: false, hint: null, error: err.message });
+    }
+  });
+
   // ORGANIZER
   socket.on("organizer_join", ({ roomCode, authKey }) => {
     try {
@@ -135,17 +165,8 @@ io.on('connection', (socket) => {
         case 'advance_phase':
           room.advancePhase(payload.phaseOverride);
           break;
-        case 'advance_round':
-          room.advanceRound();
-          break;
-        case 'set_round':
-          if (payload && payload.round) {
-            room.state.round = payload.round;
-            room.broadcastState();
-          }
-          break;
-        case 'toggle_safe_zone':
-          room.toggleSafeZone();
+        case 'start_game':
+          room.startGame(payload?.duration);
           break;
         case 'grant_tokens':
           room.grantTokens(payload.teamId, payload.amount, "organizer grant");
@@ -160,14 +181,8 @@ io.on('connection', (socket) => {
         case 'eliminate_team':
           room.eliminateTeam(payload.teamId);
           break;
-        case 'restore_team':
-          if (room.state.teams[payload.teamId]) {
-            room.state.teams[payload.teamId].status = "active";
-            room.state.teams[payload.teamId].lives = 3;
-            room.broadcastState();
-          }
-          break;
         case 'reset_game':
+          room.stopGame();
           const codes = room.state.roomCode;
           rooms.delete(codes);
           const newRoom = new GameRoom(codes);
@@ -189,19 +204,11 @@ app.get('/', (req, res) => {
   res.send('⬡ Operation Prometheus Server is running!');
 });
 
-app.post('/api/rooms/create', (req, res) => {
-  const roomCode = Math.random().toString(36).substring(2, 8).toUpperCase();
-  const room = new GameRoom(roomCode);
-  room.setIO(io);
-  rooms.set(roomCode, room);
-  res.json({ roomCode });
-});
-
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', activeRooms: rooms.size });
 });
 
 const PORT = process.env.PORT || 3001;
-httpServer.listen(PORT, () => {
+httpServer.listen(PORT, '0.0.0.0', () => {
   console.log(`⬡ Operation Prometheus server running on port ${PORT}`);
 });

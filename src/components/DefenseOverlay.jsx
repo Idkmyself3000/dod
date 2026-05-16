@@ -34,19 +34,20 @@ export default function DefenseOverlay({ attackDetails, onRepel }) {
         boxShadow: 'inset 0 0 40px rgba(192, 57, 43, 0.2)'
       }} />
 
-      <h2 className="mono text-danger uppercase" style={{ fontSize: '28px', marginBottom: '32px' }}>
-        ⚠ INCOMING ATTACK FROM {attackDetails.from}
+      <h2 className="text-display animate-pulse" style={{ fontSize: '2rem', marginBottom: '32px', color: 'var(--blood-bright)' }}>
+        ⚠ INCOMING BREACH: ORIGIN {attackDetails.from}
       </h2>
 
       <div style={{ textAlign: 'center', marginBottom: '32px', width: '100%', maxWidth: '600px' }}>
-        <div className="mono text-danger" style={{ fontSize: '80px', lineHeight: 1, marginBottom: '8px' }}>
+        <div className="text-stat" style={{ fontSize: '5rem', lineHeight: 1, marginBottom: '8px', color: 'var(--blood-bright)' }}>
           {formatTime(timeLeft)}
         </div>
-        <div style={{ width: '100%', height: '2px', backgroundColor: 'var(--color-surface-raised)' }}>
+        <div style={{ width: '100%', height: '4px', backgroundColor: 'var(--steel-dark)' }}>
           <div style={{ 
-            width: `${(timeLeft / (attackDetails.timeLeft || 90)) * 100}%`, 
+            width: `${(timeLeft / (attackDetails.timeLeft || 60)) * 100}%`, 
             height: '100%', 
-            backgroundColor: 'var(--color-danger)',
+            backgroundColor: 'var(--blood-bright)',
+            boxShadow: '0 0 20px var(--blood-bright)',
             transition: 'width 1s linear'
           }} />
         </div>
@@ -56,12 +57,12 @@ export default function DefenseOverlay({ attackDetails, onRepel }) {
         <CipherPanel 
           type={attackDetails.puzzle?.type?.toUpperCase() || 'CAESAR'} 
           text={attackDetails.puzzle?.cipherText || 'DEFEND THE SYSTEM'} 
-          hint={attackDetails.puzzle?.hint}
         />
         <AnswerInput 
           onSubmit={(ans) => onRepel(ans)} 
           variant="danger" 
           isError={false}
+          options={attackDetails.puzzle?.options || []}
         />
       </div>
 

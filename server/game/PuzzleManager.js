@@ -12,16 +12,21 @@ export class PuzzleManager {
 
   // Gets a random puzzle matching criteria
   getRandomPuzzle(difficulty, pool, excludeIds = []) {
-    const candidates = this.puzzles.filter(p => 
-      p.difficulty === difficulty && 
-      p.pool === pool && 
-      !excludeIds.includes(p.id)
-    );
+    const targetDifficulty = difficulty.toUpperCase();
+    
+    const candidates = this.puzzles.filter(p => {
+      const difficultyMatch = (targetDifficulty === "ANY") ? true : (p.difficulty.toUpperCase() === targetDifficulty);
+      const poolMatch = pool ? (p.pool === pool) : true;
+      const notExcluded = !excludeIds.includes(p.id);
+      return difficultyMatch && poolMatch && notExcluded;
+    });
     
     if (candidates.length === 0) {
-      // Fallback if we run out (just grab any from that pool)
-      const fallback = this.puzzles.filter(p => p.pool === pool);
-      if (fallback.length === 0) return this.puzzles[0];
+      // Fallback: ignore exclusion if we have to
+      const fallback = this.puzzles.filter(p => (targetDifficulty === "ANY") ? true : (p.difficulty.toUpperCase() === targetDifficulty));
+      if (fallback.length === 0) {
+        return this.puzzles[Math.floor(Math.random() * this.puzzles.length)];
+      }
       return fallback[Math.floor(Math.random() * fallback.length)];
     }
     

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useGameState } from '../hooks/useGameState';
 import PhaseController from '../components/PhaseController';
 import SafeZoneToggle from '../components/SafeZoneToggle';
@@ -8,195 +8,211 @@ import SignalLog from '../components/SignalLog';
 export default function OrganizerPage() {
   const { gameState, organizer } = useGameState();
   const [showSuddenDeathModal, setShowSuddenDeathModal] = useState(false);
+  const [holdingTeamId, setHoldingTeamId] = useState(null);
+  const eliminateTimeoutRef = useRef(null);
 
-  // Handle phase blur animation
-  const [phaseWipe, setPhaseWipe] = useState(false);
-  const [currentPhaseStr, setCurrentPhaseStr] = useState(gameState.phase);
+  const handleEliminateHoldStart = (teamId) => {
+    setHoldingTeamId(teamId);
+    eliminateTimeoutRef.current = setTimeout(() => {
+      organizer.eliminateTeam(teamId);
+      setHoldingTeamId(null);
+    }, 2000); // 2 second hold
+  };
 
-  React.useEffect(() => {
-    if (gameState.phase !== currentPhaseStr) {
-      setPhaseWipe(true);
-      setTimeout(() => {
-        setCurrentPhaseStr(gameState.phase);
-        setPhaseWipe(false);
-      }, 200); // Wait halfway for wipe to swap text
+  const handleEliminateHoldEnd = () => {
+    setHoldingTeamId(null);
+    if (eliminateTimeoutRef.current) {
+      clearTimeout(eliminateTimeoutRef.current);
     }
-  }, [gameState.phase, currentPhaseStr]);
+  };
+
+  const getPhaseClass = (phase) => {
+    if (phase === 'SUDDEN DEATH') return 'phase-badge-sudden';
+    if (phase === 'SAFE ZONE') return 'phase-badge-safezone';
+    if (phase === 'LOBBY' || phase === 'ENDED') return 'text-muted';
+    return 'phase-badge-active';
+  };
+
+  const [activeTab, setActiveTab] = useState('control'); // 'control' or 'leaderboard'
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+    <div className="surface-void organizer-layout" style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
       
-      {/* Top Bar */}
-      <div style={{ 
-        display: 'flex', 
-        justifyContent: 'space-between', 
-        alignItems: 'center', 
-        padding: '16px var(--spacing-base)',
-        borderBottom: '1px solid var(--color-border)',
-        backgroundColor: 'var(--color-surface)'
-      }}>
-        <div className="mono text-gold uppercase" style={{ fontSize: '18px', flex: 1 }}>
-          ⬡ OPERATION PROMETHEUS
+      {/* ── Header ── */}
+      <div className="round-bar" style={{ flexShrink: 0 }}>
+        <div className="round-bar-wordmark">TACTICAL COMMAND</div>
+        <div className="round-bar-divider" />
+        <div className="round-bar-round">
+          <div className="round-bar-label">ROOM</div>
+          <div className="round-bar-number">{gameState.roomCode}</div>
         </div>
-        <div className="mono text-muted uppercase" style={{ fontSize: '14px', flex: 1, textAlign: 'center' }}>
-          ROOM: {gameState.roomCode}
+        
+        <div style={{ flex: 1, display: 'flex', justifyContent: 'center', gap: '40px' }}>
+          <button 
+            onClick={() => setActiveTab('control')}
+            className={`text-label ${activeTab === 'control' ? 'text-danger' : 'text-muted'}`}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '10px', position: 'relative' }}
+          >
+            CONTROL PANEL
+            {activeTab === 'control' && <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '4px', background: 'var(--blood-active)' }} />}
+          </button>
+          <button 
+            onClick={() => setActiveTab('leaderboard')}
+            className={`text-label ${activeTab === 'leaderboard' ? 'text-danger' : 'text-muted'}`}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '10px', position: 'relative' }}
+          >
+            LIVE LEADERBOARD
+            {activeTab === 'leaderboard' && <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '4px', background: 'var(--blood-active)' }} />}
+          </button>
         </div>
-        <div style={{ flex: 1, display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '24px' }}>
-          <div className={`mono text-gold uppercase ${phaseWipe ? 'phase-wipe' : ''}`} style={{ 
-            border: '1px solid var(--color-primary)', 
-            padding: '4px 12px', 
-            fontSize: '12px' 
-          }}>
-            PHASE {PHASES_MAP[currentPhaseStr] || 0} — {currentPhaseStr}
-          </div>
-          <style>{`
-            .phase-wipe {
-              animation: phaseWipeAnim 400ms ease-in-out forwards;
-            }
-            @keyframes phaseWipeAnim {
-              0% { filter: blur(0px); opacity: 1; transform: scaleY(1); }
-              50% { filter: blur(4px); opacity: 0; transform: scaleY(0.1); }
-              100% { filter: blur(0px); opacity: 1; transform: scaleY(1); }
-            }
-          `}</style>
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <button className="mono text-muted bg-transparent border-0 uppercase" style={{ fontSize: '12px' }}>◀ PREV ROUND</button>
-            <button className="mono text-muted bg-transparent border-0 uppercase" style={{ fontSize: '12px' }}>NEXT ROUND ▶</button>
-          </div>
+
+        <div className={`round-bar-phase ${gameState.gameStarted ? 'phase-badge-active' : 'text-muted'}`}>
+          {gameState.gameStarted ? 'MISSION ACTIVE' : 'STANDBY'}
         </div>
       </div>
 
-      <div style={{ display: 'flex', flex: 1, padding: 'var(--spacing-base)' }}>
-        
-        {/* Left Column 30% */}
-        <div style={{ width: '30%', paddingRight: '16px', borderRight: '1px solid var(--color-surface-raised)', display: 'flex', flexDirection: 'column', gap: '16px', overflowY: 'auto' }}>
-          <div className="mono text-muted uppercase" style={{ fontSize: '10px' }}>TEAM COMMAND</div>
-          {gameState.teams.map(team => (
-            <div key={team.id} style={{ 
-              backgroundColor: 'var(--color-surface)', 
-              border: '1px solid var(--color-border)', 
-              padding: '16px',
-              opacity: team.status === 'ELIMINATED' ? 0.5 : 1
-            }}>
-              <div className="mono text-gold uppercase" style={{ fontSize: '16px', marginBottom: '16px' }}>{team.name}</div>
-              
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
-                <div>
-                  <div className="mono text-muted" style={{ fontSize: '10px', marginBottom: '4px' }}>LIVES</div>
-                  <div style={{ display: 'flex', gap: '4px' }}>
-                    {[...Array(3)].map((_, i) => (
-                      <span key={i} 
-                        onClick={() => organizer.updateTeamLives(team.id, i < team.lives ? team.lives - 1 : team.lives + 1)}
-                        style={{ 
-                          cursor: 'pointer',
-                          color: i < team.lives ? 'var(--color-primary)' : 'var(--color-text-muted)',
-                          fontSize: '18px',
-                          lineHeight: 1
-                        }}>
-                        {i < team.lives ? '●' : '○'}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <div className="mono text-muted" style={{ fontSize: '10px', marginBottom: '4px' }}>TOKENS</div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <button onClick={() => organizer.updateTeamTokens(team.id, -1)} style={{ width: '28px', height: '28px', border: '1px solid var(--color-border)', color: 'var(--color-text)', backgroundColor: 'transparent' }}>-</button>
-                    <span className="mono text-gold" style={{ width: '32px', textAlign: 'center' }}>{team.tokens}</span>
-                    <button onClick={() => organizer.updateTeamTokens(team.id, 1)} style={{ width: '28px', height: '28px', border: '1px solid var(--color-border)', color: 'var(--color-text)', backgroundColor: 'transparent' }}>+</button>
-                  </div>
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <select 
-                  className="mono uppercase"
-                  value={team.status} 
-                  onChange={() => {}} // Disabled for simplicity, we mock ELIMINATE separately
-                  style={{
-                    flex: 1,
-                    padding: '8px',
-                    backgroundColor: 'var(--color-bg)',
-                    border: '1px solid var(--color-border)',
-                    color: 'var(--color-text)'
+      {/* ── Content Area ── */}
+      <div style={{ flex: 1, overflow: 'hidden', display: 'flex' }}>
+        {activeTab === 'control' ? (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 380px', width: '100%', height: '100%' }}>
+            {/* ... Team Command logic ... */}
+            <div style={{ padding: '32px', overflowY: 'auto' }}>
+              <div className="text-h2 sep-steel" style={{ marginBottom: '24px' }}>OPERATIVE STATUS</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '20px' }}>
+                {gameState.teams.map(team => (
+                  <div key={team.id} className="surface-iron animate-enter" style={{ 
+                    padding: '24px',
+                    opacity: team.status === 'ELIMINATED' ? 0.4 : 1,
                   }}>
-                  <option value="ACTIVE">ACTIVE</option>
-                  <option value="DANGER">DANGER</option>
-                  <option value="SAFE ZONE">SAFE ZONE</option>
-                  <option value="ELIMINATED">ELIMINATED</option>
-                </select>
-                <button 
-                  onClick={() => organizer.eliminateTeam(team.id)}
-                  disabled={team.status === 'ELIMINATED'}
-                  className="mono uppercase"
-                  style={{
-                    padding: '8px 16px',
-                    backgroundColor: 'transparent',
-                    border: '1px solid var(--color-danger)',
-                    color: 'var(--color-danger)',
-                    transition: 'background-color 0.2s',
-                    opacity: team.status === 'ELIMINATED' ? 0.3 : 1
-                  }}
-                  onMouseEnter={(e) => !e.currentTarget.disabled && (e.currentTarget.style.backgroundColor = 'var(--color-danger-hover)')}
-                  onMouseLeave={(e) => !e.currentTarget.disabled && (e.currentTarget.style.backgroundColor = 'transparent')}
-                >
-                  ELIMINATE
-                </button>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                      <div className="text-h2" style={{ color: 'var(--steel-white)' }}>{team.name}</div>
+                      <div className="text-label" style={{ fontSize: '0.7rem' }}>ID: {team.id}</div>
+                    </div>
+                    
+                    <div style={{ display: 'flex', gap: '32px', marginBottom: '24px' }}>
+                      <div style={{ flex: 1 }}>
+                        <div className="text-label" style={{ marginBottom: '12px' }}>VITALITY</div>
+                        <div className="lives-meter">
+                          {[...Array(3)].map((_, i) => (
+                            <div 
+                              key={i} 
+                              className={`pixel-heart ${i < team.lives ? (team.lives === 1 ? 'critical' : '') : 'empty'}`} 
+                              onClick={() => organizer.updateTeamLives(team.id, i < team.lives ? team.lives - 1 : team.lives + 1)}
+                              style={{ cursor: 'pointer' }}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-label" style={{ marginBottom: '12px' }}>CREDITS</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                          <button className="btn-ghost" onClick={() => organizer.updateTeamTokens(team.id, -1)}>-</button>
+                          <span className="text-stat">{team.tokens}</span>
+                          <button className="btn-ghost" onClick={() => organizer.updateTeamTokens(team.id, 1)}>+</button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '12px' }}>
+                      <button 
+                        onMouseDown={() => handleEliminateHoldStart(team.id)}
+                        onMouseUp={handleEliminateHoldEnd}
+                        onMouseLeave={handleEliminateHoldEnd}
+                        disabled={team.status === 'ELIMINATED'}
+                        className={`btn-danger ${holdingTeamId === team.id ? 'holding' : ''}`}
+                        style={{ flex: 1 }}
+                      >
+                        {holdingTeamId === team.id ? 'TERMINATING...' : 'ELIMINATE'}
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
-          ))}
-        </div>
 
-        {/* Center Column 40% */}
-        <div style={{ width: '40%', padding: '0 16px' }}>
-          <LeaderboardPanel teams={gameState.teams} />
-        </div>
+            {/* Global Controls */}
+            <div style={{ borderLeft: '1px solid var(--steel-dark)', padding: '32px', backgroundColor: 'rgba(10,10,20,0.4)', overflowY: 'auto' }}>
+              <div className="text-label" style={{ marginBottom: '16px' }}>MISSION CONTROL</div>
+              
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '32px' }}>
+                {!gameState.gameStarted ? (
+                  <>
+                    <button 
+                      onClick={() => organizer.startGame()}
+                      className="btn-primary"
+                      style={{ width: '100%', padding: '20px' }}
+                    >
+                      START MISSION
+                    </button>
+                    <button 
+                      onClick={() => {
+                        if (window.confirm("CRITICAL: THIS WILL DELETE ALL PLAYER DATA AND RESET THE LEADERBOARD. PROCEED?")) {
+                          organizer.resetGame();
+                        }
+                      }}
+                      className="btn-ghost"
+                      style={{ width: '100%', padding: '12px', marginTop: '8px', color: 'var(--blood-active)', borderColor: 'var(--blood-deep)' }}
+                    >
+                      RESET LEADERBOARD
+                    </button>
+                  </>
+                ) : (
+                  <button 
+                    onClick={() => {
+                      if (window.confirm("STOP MISSION AND RESET TERMINAL?")) {
+                        organizer.resetGame();
+                      }
+                    }}
+                    className="btn-danger"
+                    style={{ width: '100%', padding: '20px' }}
+                  >
+                    RESET TERMINAL
+                  </button>
+                )}
+              </div>
 
-        {/* Right Column 30% */}
-        <div style={{ width: '30%', paddingLeft: '16px', borderLeft: '1px solid var(--color-surface-raised)', display: 'flex', flexDirection: 'column' }}>
-          <PhaseController currentPhase={gameState.phase} onAdvance={(p) => organizer.setPhase(p)} />
-          
-          <SafeZoneToggle isActive={gameState.safeZoneActive} onToggle={organizer.toggleSafeZone} />
-          
-          <div style={{ marginBottom: '32px' }}>
-            <button 
-              onClick={() => setShowSuddenDeathModal(true)}
-              className="mono uppercase text-danger"
-              style={{
-                width: '100%',
-                padding: '16px',
-                backgroundColor: 'transparent',
-                border: '1px solid var(--color-danger)',
-                fontWeight: 'bold',
-                transition: 'background-color 0.2s'
-              }}
-              onMouseEnter={(e) => e.target.style.backgroundColor = 'var(--color-danger-hover)'}
-              onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
-            >
-              ACTIVATE SUDDEN DEATH
-            </button>
+              <div className="sep-steel" style={{ margin: '32px 0' }} />
+              
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <button 
+                   onClick={() => setShowSuddenDeathModal(true)}
+                   className="btn-danger"
+                   style={{ width: '100%', padding: '16px', background: 'var(--blood-deep)', color: 'var(--blood-bright)', fontSize: '0.8rem' }}
+                >
+                  ⚠ FORCE SUDDEN DEATH
+                </button>
+              </div>
+
+              <div className="sep-steel" style={{ margin: '32px 0' }} />
+              <SignalLog events={gameState.recentEvents} />
+            </div>
           </div>
-
-          <div style={{ flex: 1 }}>
-            <SignalLog events={gameState.recentEvents} />
+        ) : (
+          <div style={{ width: '100%', height: '100%', padding: '40px', overflowY: 'auto' }}>
+            <div style={{ maxWidth: '1000px', margin: '0 auto' }}>
+              <div className="text-display" style={{ textAlign: 'center', fontSize: '2rem', marginBottom: '40px', color: 'var(--steel-white)' }}>
+                GLOBAL STANDINGS
+              </div>
+              <LeaderboardPanel teams={gameState.teams} />
+            </div>
           </div>
-        </div>
-
+        )}
       </div>
 
+      {/* Sudden Death Modal */}
       {showSuddenDeathModal && (
         <div style={{
           position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          backgroundColor: 'rgba(10,10,10,0.95)',
+          backgroundColor: 'rgba(8,8,16,0.95)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           zIndex: 1000
         }}>
-          <div style={{ backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-danger)', padding: '32px', width: '400px' }}>
-            <h2 className="mono text-danger uppercase" style={{ fontSize: '24px', marginBottom: '24px', textAlign: 'center' }}>
-              CONFIRM SUDDEN DEATH?
+          <div className="surface-threat" style={{ padding: '40px', width: '480px', textAlign: 'center' }}>
+            <h2 className="text-display" style={{ fontSize: '2rem', color: 'var(--blood-active)', marginBottom: '32px' }}>
+              CONFIRM SUDDEN DEATH
             </h2>
             <div style={{ display: 'flex', gap: '16px' }}>
-              <button onClick={() => setShowSuddenDeathModal(false)} className="mono uppercase" style={{ flex: 1, padding: '12px', border: '1px solid var(--color-border)', backgroundColor: 'transparent', color: 'var(--color-text)' }}>
+              <button onClick={() => setShowSuddenDeathModal(false)} className="btn-ghost" style={{ flex: 1 }}>
                 CANCEL
               </button>
               <button 
@@ -204,7 +220,7 @@ export default function OrganizerPage() {
                   organizer.setPhase('SUDDEN DEATH');
                   setShowSuddenDeathModal(false);
                 }} 
-                className="mono uppercase" style={{ flex: 1, padding: '12px', backgroundColor: 'var(--color-danger)', border: 'none', color: '#fff', fontWeight: 'bold' }}>
+                className="btn-danger" style={{ flex: 1 }}>
                 YES, ACTIVATE
               </button>
             </div>
@@ -215,12 +231,3 @@ export default function OrganizerPage() {
     </div>
   );
 }
-
-const PHASES_MAP = {
-  'LOBBY': 1,
-  'EARLY': 2,
-  'MID': 3,
-  'FINAL': 4,
-  'SUDDEN DEATH': 5,
-  'ENDED': 6
-};

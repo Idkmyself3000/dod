@@ -1,34 +1,48 @@
 :root {
-  /* Colors */
-  --color-bg: #0A0A0A;
-  --color-surface: #111111;
-  --color-surface-raised: #1A1A1A;
-  --color-border: #2A2A2A;
-  --color-primary: #C8A96E; /* Aged gold */
-  --color-primary-hover: #D4B87A;
-  --color-danger: #C0392B; /* Deep red */
-  --color-danger-hover: #1A0808;
-  --color-success: #2E7D52; /* Forest green */
-  --color-text: #E8E4DC; /* Warm off-white */
-  --color-text-secondary: #7A756C; /* Muted warm gray */
-  --color-text-muted: #3D3A35;
-  --color-danger-bg: #1A1500;
-  
-  /* Typography */
-  --font-mono: "Space Mono", "IBM Plex Mono", monospace;
-  --font-body: "Inter", sans-serif;
-  
-  /* Space & Radius */
-  --spacing-base: 16px;
-  --padding-card: 24px;
-  --radius-sm: 4px;
-  
-  /* scanline pattern base64 for background image */
-  --scanline: repeating-linear-gradient(
-    0deg,
-    rgba(255, 255, 255, 0.03) 0px,
-    rgba(255, 255, 255, 0.03) 1px,
-    transparent 1px,
-    transparent 2px
-  );
+  /* ── Pure Black ── */
+  --void-black:     #000000;
+  --void-deep:      #060606;
+  --void-surface:   #0E0E0E;
+  --void-raised:    #181818;
+
+  /* ── Pure White Scale ── */
+  --steel-white:    #FFFFFF;
+  --steel-bright:   #EEEEEE;
+  --steel-light:    #CCCCCC;
+  --steel-mid:      #888888;
+  --steel-dark:     #444444;
+  --steel-abyss:    #222222;
+
+  /* ── Surgical Red — Hearts & Critical Only ── */
+  --blood-active:   #FF0000;
+  --blood-bright:   #FF3333;
+  --blood-iron:     #CC0000;
+  --blood-deep:     #660000;
+
+  /* ── Semantic Aliases ── */
+  --color-bg:            var(--void-black);
+  --color-surface:       var(--void-surface);
+  --color-border:        var(--steel-white);
+  --color-border-active: var(--steel-white);
+  --color-text:          var(--steel-white);
+  --color-text-primary:  var(--steel-white);
+  --color-text-secondary: var(--steel-light);
+  --color-text-muted:    var(--steel-mid);
+  --color-accent:        var(--steel-white);
+  --color-danger:        var(--steel-white);
+  --color-success:       var(--steel-white);
+  --color-primary:       var(--steel-white);
+
+  /* ── Typography ── */
+  --font-display: 'Cinzel', 'Georgia', serif;
+  --font-mono: 'Share Tech Mono', 'Courier New', monospace;
+  --font-ui: 'Barlow Condensed', 'Impact', sans-serif;
+
+  /* ── Spacing Scale ── */
+  --space-xs:  4px;
+  --space-sm:  8px;
+  --space-md:  16px;
+  --space-lg:  24px;
+  --space-xl:  40px;
+  --space-2xl: 64px;
 }

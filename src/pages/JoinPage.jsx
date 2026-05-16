@@ -11,108 +11,151 @@ export default function JoinPage() {
 
   const handleJoin = async (e) => {
     e.preventDefault();
-    const code = roomCode.toUpperCase();
+    const inputCode = roomCode.trim().toUpperCase();
     
     setWaiting(true);
 
-    if (code === 'ORG' || code === 'CREATE') {
-      try {
-        const res = await fetch("http://localhost:3001/api/rooms/create", { method: "POST" });
-        const data = await res.json();
-        organizerJoin(data.roomCode, "prometheus-admin-2024");
-        navigate('/organizer');
-      } catch (err) {
-        alert("Failed to create room: " + err.message);
-        setWaiting(false);
-      }
-      return;
-    }
-    
-    if (code.startsWith('ORG-')) {
-      const actualCode = code.split('-')[1];
-      organizerJoin(actualCode, "prometheus-admin-2024");
+    if (inputCode === 'SAGAV') {
+      // Admin Access
+      organizerJoin("DOMAIN", "prometheus-admin-2024");
       navigate('/organizer');
       return;
     }
+    
+    if (inputCode === 'VIBE') {
+      // Player Access
+      const teamId = "t_" + teamName.toLowerCase().replace(/[^a-z0-9]/g, "");
+      joinRoom(teamId, "DOMAIN", teamName);
+      
+      setTimeout(() => {
+        navigate('/play');
+      }, 500);
+      return;
+    }
 
-    const teamId = "t_" + teamName.toLowerCase().replace(/[^a-z0-9]/g, "");
-    joinRoom(teamId, code, teamName);
-
-    setTimeout(() => {
-      navigate('/play');
-    }, 500);
+    alert(`INVALID ACCESS CODE: "${inputCode}". ACCESS DENIED.`);
+    setWaiting(false);
   };
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', padding: 'var(--spacing-base)' }}>
-      <div style={{ width: '100%', maxWidth: '480px', backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)', padding: '32px' }}>
-        <h1 style={{ color: 'var(--color-primary)', textAlign: 'center', fontSize: '24px', letterSpacing: '0.1em' }} className="mono uppercase">
-          ⬡ Operation Prometheus
-        </h1>
-        <p className="mono text-muted uppercase" style={{ textAlign: 'center', fontSize: '12px', marginBottom: '32px', letterSpacing: '0.05em' }}>
-          Authentication Required
-        </p>
+    <div className="surface-void" style={{ 
+      display: 'flex', 
+      alignItems: 'center', 
+      justifyContent: 'center', 
+      minHeight: '100vh', 
+      padding: '24px' 
+    }}>
+      <div className="animate-enter" style={{ 
+        width: '100%', 
+        maxWidth: '520px', 
+        padding: '64px',
+        border: '3px solid var(--steel-white)',
+        background: 'var(--void-black)',
+        position: 'relative',
+      }}>
+        {/* Corner war markers */}
+        <div style={{ position: 'absolute', top: -2, left: -2, width: 20, height: 20, borderTop: '4px solid var(--blood-active)', borderLeft: '4px solid var(--blood-active)' }} />
+        <div style={{ position: 'absolute', top: -2, right: -2, width: 20, height: 20, borderTop: '4px solid var(--blood-active)', borderRight: '4px solid var(--blood-active)' }} />
+        <div style={{ position: 'absolute', bottom: -2, left: -2, width: 20, height: 20, borderBottom: '4px solid var(--blood-active)', borderLeft: '4px solid var(--blood-active)' }} />
+        <div style={{ position: 'absolute', bottom: -2, right: -2, width: 20, height: 20, borderBottom: '4px solid var(--blood-active)', borderRight: '4px solid var(--blood-active)' }} />
+
+        {/* Header */}
+        <div style={{ textAlign: 'center', marginBottom: '48px' }}>
+          <div style={{ fontSize: '2rem', color: 'var(--blood-active)', marginBottom: '12px', letterSpacing: '0.5em' }}>⚔</div>
+          <h1 className="text-display" style={{ fontSize: '3.5rem', marginBottom: '12px', borderLeft: 'none', textAlign: 'center', paddingLeft: 0 }}>
+            ROYAL RUMBLE
+          </h1>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '16px', marginTop: '16px' }}>
+            <div style={{ flex: 1, height: '2px', background: 'var(--steel-mid)' }} />
+            <span className="text-label" style={{ color: 'var(--blood-active)', letterSpacing: '0.5em', fontSize: '0.65rem' }}>ARENA DIGITALIS</span>
+            <div style={{ flex: 1, height: '2px', background: 'var(--steel-mid)' }} />
+          </div>
+        </div>
 
         {waiting ? (
-          <div style={{ textAlign: 'center', padding: '32px 0' }}>
-            <p className="mono text-success uppercase" style={{ fontSize: '16px', letterSpacing: '0.1em' }}>
-              Standby — Awaiting Organizer<span style={{ animation: 'blink 1s step-end infinite' }}>|</span>
+          <div style={{ textAlign: 'center', padding: '40px 0' }}>
+            <div className="text-stat" style={{ fontSize: '1.5rem', color: 'var(--blood-active)', marginBottom: '16px' }}>
+              GLADIATOR IDENTIFIED
+            </div>
+            <p className="text-label animate-pulse" style={{ color: 'var(--steel-white)', fontSize: '0.8rem' }}>
+              ENTERING THE ARENA...
             </p>
-            <style>{`
-              @keyframes blink { 50% { opacity: 0; } }
-            `}</style>
           </div>
         ) : (
-          <form onSubmit={handleJoin} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <form onSubmit={handleJoin} style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
             <div>
-              <input
-                type="text"
-                placeholder="ROOM CODE"
-                value={roomCode}
-                onChange={(e) => setRoomCode(e.target.value)}
-                required
-                className="mono uppercase"
-                style={{
-                  width: '100%', padding: '16px', backgroundColor: 'var(--color-bg)',
-                  border: '1px solid var(--color-border)', color: 'var(--color-text)', fontSize: '18px',
-                  outline: 'none', transition: 'border-color 0.2s'
-                }}
-                onFocus={(e) => e.target.style.borderColor = 'var(--color-primary)'}
-                onBlur={(e) => e.target.style.borderColor = 'var(--color-border)'}
-              />
+              <div className="text-label" style={{ marginBottom: '8px', color: 'var(--steel-light)', fontSize: '0.7rem' }}>ACCESS CODE</div>
+              <div style={{ border: '2px solid var(--steel-mid)', background: 'var(--void-black)' }}>
+                <input
+                  type="text"
+                  placeholder="ENTER CODE"
+                  value={roomCode}
+                  onChange={(e) => setRoomCode(e.target.value)}
+                  required
+                  className="mono uppercase"
+                  style={{
+                    width: '100%', padding: '18px 20px', backgroundColor: 'transparent',
+                    border: 'none', color: 'var(--steel-white)', fontSize: '1.125rem',
+                    outline: 'none', letterSpacing: '0.25em'
+                  }}
+                />
+              </div>
             </div>
+            
             <div>
-              <input
-                type="text"
-                placeholder="TEAM NAME"
-                value={teamName}
-                onChange={(e) => setTeamName(e.target.value)}
-                required
-                className="mono uppercase"
-                style={{
-                  width: '100%', padding: '16px', backgroundColor: 'var(--color-bg)',
-                  border: '1px solid var(--color-border)', color: 'var(--color-text)', fontSize: '18px',
-                  outline: 'none', transition: 'border-color 0.2s'
-                }}
-                onFocus={(e) => e.target.style.borderColor = 'var(--color-primary)'}
-                onBlur={(e) => e.target.style.borderColor = 'var(--color-border)'}
-              />
+              <div className="text-label" style={{ marginBottom: '8px', color: 'var(--steel-light)', fontSize: '0.7rem' }}>GLADIATOR NAME</div>
+              <div style={{ border: '2px solid var(--steel-mid)', background: 'var(--void-black)' }}>
+                <input
+                  type="text"
+                  placeholder="YOUR NAME"
+                  value={teamName}
+                  onChange={(e) => setTeamName(e.target.value)}
+                  required
+                  className="mono uppercase"
+                  style={{
+                    width: '100%', padding: '18px 20px', backgroundColor: 'transparent',
+                    border: 'none', color: 'var(--steel-white)', fontSize: '1.125rem',
+                    outline: 'none', letterSpacing: '0.25em'
+                  }}
+                />
+              </div>
             </div>
-            <button
-              type="submit"
-              className="mono uppercase"
-              style={{
-                marginTop: '16px', width: '100%', height: '48px', backgroundColor: 'var(--color-primary)',
-                color: 'var(--color-bg)', fontSize: '18px', fontWeight: 'bold', border: 'none'
-              }}
-              onMouseEnter={(e) => e.target.style.backgroundColor = 'var(--color-primary-hover)'}
-              onMouseLeave={(e) => e.target.style.backgroundColor = 'var(--color-primary)'}
-            >
-              Enter The Arena
-            </button>
+            
+            <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <button type="submit" className="btn-primary" style={{ width: '100%', fontSize: '1.125rem', padding: '18px' }}>
+                ⚔ ENTER THE ARENA
+              </button>
+              
+              <button 
+                type="button" 
+                className="btn-ghost" 
+                onClick={() => navigate('/leaderboard')}
+                style={{ width: '100%', fontSize: '0.8rem', padding: '14px' }}
+              >
+                SPECTATE THE ARENA
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'center', marginTop: '24px' }}>
+              <span className="text-label" style={{ fontSize: '0.65rem', color: 'var(--steel-mid)' }}>COLOSSEUM // SEC_V5 // ENCRYPTED</span>
+            </div>
           </form>
         )}
       </div>
+
+      <style>{`
+        .animate-pulse {
+          animation: pulse 1s infinite;
+        }
+        @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: .2; }
+        }
+        input::placeholder {
+          color: var(--steel-dark) !important;
+          opacity: 1;
+        }
+      `}</style>
     </div>
   );
 }

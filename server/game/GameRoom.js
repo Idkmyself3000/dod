@@ -1,5 +1,4 @@
 import { PuzzleManager } from './PuzzleManager.js';
-import { RoundManager } from './RoundManager.js';
 import { BattleManager } from './BattleManager.js';
 import { broadcastState, emitToSocket } from '../utils/broadcast.js';
 import { v4 as uuidv4 } from 'uuid';
@@ -7,15 +6,38 @@ import { v4 as uuidv4 } from 'uuid';
 function createInitialState(roomCode) {
   return {
     roomCode,
-    phase: "lobby",
-    round: 1,
+    phase: "LOBBY",
+    gameStarted: false,
+    timeRemaining: 0,
+    totalTime: 0,
     safeZoneActive: false,
     teams: {},
     pendingAttacks: [],
-    eventLog: [],
-    roundConfig: RoundManager.ROUND_CONFIG
+    eventLog: []
   };
 }
+
+const TAUNTS = {
+  WRONG: [
+    "PATHETIC. EVEN A MACHINE WOULD DO BETTER.",
+    "MISTAKE RECORDED. FAILURE IS YOUR ONLY CONSISTENT TRAIT.",
+    "WRONG. AGAIN. DO YOU EVEN COMPREHEND THE STAKES?",
+    "THAT ANSWER WAS AN INSULT TO LOGIC.",
+    "YOUR INTELLECT IS AS SHALLOW AS YOUR LIVES.",
+    "BEYOND INCOMPETENT. ARE YOU EVEN TRYING?",
+    "ERROR 404: BRAIN NOT FOUND.",
+    "YOU ARE THE REASON WE HAVE TO LOWER THE STANDARDS."
+  ],
+  HINT: [
+    "A HINT? THE COWARD'S WAY OUT.",
+    "NEED A HAND TO HOLD? WEAKNESS DETECTED.",
+    "HINT GRANTED. DIGNITY LOST.",
+    "BEGGING FOR SCRAPS OF INFORMATION? DISGUSTING.",
+    "I'LL EXPLAIN IT SLOWLY FOR YOU... SINCE YOU'RE CLEARLY STRUGGLING.",
+    "MAYBE THIS IS TOO ADVANCED FOR YOUR PRIMITIVE MIND?",
+    "HINT ACQUIRED. CONFIDENCE SHATTERED."
+  ]
+};
 
 export class GameRoom {
   constructor(roomCode) {
@@ -23,6 +45,7 @@ export class GameRoom {
     this.io = null;
     this.puzzleManager = new PuzzleManager();
     this.defenseTimers = new Map();
+    this.gameInterval = null;
   }
 
   setIO(io) {
@@ -40,10 +63,15 @@ export class GameRoom {
         status: "active",
         currentPuzzleIndex: 0,
         solvedPuzzleIds: [],
-        tokenHistory: []
+        displayedPuzzleIds: [],
+        lastTaunt: null,
+        tokenHistory: [],
+        joinTime: Date.now()
       };
       
-      this._assignNextPuzzle(teamId);
+      if (this.state.gameStarted) {
+        this._assignNextPuzzle(teamId);
+      }
       this._addToLog("neutral", `${displayName} joined the room`, [teamId]);
       this.broadcastState();
       return true;
@@ -74,6 +102,7 @@ export class GameRoom {
       this.grantTokens(teamId, tokenReward, "solved puzzle");
       team.solvedPuzzleIds.push(puzzleId);
       team.currentPuzzleIndex++;
+      team.lastTaunt = null;
       this._addToLog("solve", `${team.displayName} solved cipher (+${tokenReward} tokens)`, [teamId]);
       
       const nextPuzzle = this._assignNextPuzzle(teamId);
@@ -81,17 +110,25 @@ export class GameRoom {
       return { correct: true, tokensEarned: tokenReward, nextPuzzle };
     }
 
-    return { correct: false, tokensEarned: 0 };
+    // Wrong answer punishment
+    this.grantTokens(teamId, -2, "wrong answer punishment");
+    
+    const taunt = TAUNTS.WRONG[Math.floor(Math.random() * TAUNTS.WRONG.length)];
+    team.lastTaunt = taunt;
+    this._addToLog("attack", `${team.displayName} FAILED MISSION. -2 TOKENS. ${taunt}`, [teamId]);
+    
+    // Change the question immediately
+    const nextPuzzle = this._assignNextPuzzle(teamId);
+    this.broadcastState();
+
+    return { correct: false, tokensEarned: 0, nextPuzzle };
   }
 
   launchAttack(fromTeamId, targetTeamId) {
     const team = this.state.teams[fromTeamId];
     const targetTeam = this.state.teams[targetTeamId];
     
-    const config = RoundManager.getConfigForRound(this.state.round);
-    const attacksAllowed = config.attacksAllowed;
-    
-    const validation = BattleManager.validateAttack(team, targetTeam, this.state.pendingAttacks, attacksAllowed, this.state.safeZoneActive);
+    const validation = BattleManager.validateAttack(team, targetTeam, this.state.pendingAttacks, this.state.safeZoneActive);
     
     if (!validation.valid) {
       return { success: false, error: validation.error };
@@ -101,8 +138,9 @@ export class GameRoom {
     team.tokenHistory.push({ timestamp: Date.now(), amount: -BattleManager.COSTS.ATTACK, reason: "launched attack" });
     
     targetTeam.status = "defending";
-
-    const defPuzzle = this.puzzleManager.getRandomPuzzle(config.difficulty, "defense");
+    
+    // Attack questions are HARD
+    const defPuzzle = this.puzzleManager.getRandomPuzzle("HARD", "defense");
     const attack = BattleManager.createAttack(fromTeamId, targetTeamId, defPuzzle.id);
     this.state.pendingAttacks.push(attack);
 
@@ -120,7 +158,7 @@ export class GameRoom {
 
     const timer = setTimeout(() => {
       this.resolveDefenseTimeout(attack.id);
-    }, 60000);
+    }, 30000); // 30 second defense window
     this.defenseTimers.set(attack.id, timer);
 
     return { success: true, attackId: attack.id };
@@ -159,6 +197,23 @@ export class GameRoom {
       return { correct: true };
     }
 
+    // Wrong defense answer — defender loses a life immediately
+    clearTimeout(this.defenseTimers.get(attackId));
+    this.defenseTimers.delete(attackId);
+    this.state.pendingAttacks.splice(attackIdx, 1);
+
+    team.status = "active";
+    team.lives -= 1;
+
+    const attacker = this.state.teams[attack.fromTeam];
+    this._addToLog("attack", `${team.displayName} failed defense — lost a life to ${attacker?.displayName || 'Unknown'}`, [teamId, attack.fromTeam]);
+
+    if (team.socketId) {
+      emitToSocket(this.io, team.socketId, "attack_resolved", { success: false, teamId, livesRemaining: team.lives });
+    }
+
+    this._checkElimination(teamId);
+    this.broadcastState();
     return { correct: false };
   }
 
@@ -208,34 +263,60 @@ export class GameRoom {
     return { success: true, puzzle: gamblePuzzle };
   }
 
-  advanceRound() {
-    this.state.round += 1;
-    this.state.phase = RoundManager.determinePhaseFromRound(this.state.round);
-    
-    // Assign new puzzle to everyone
-    Object.values(this.state.teams).forEach(team => {
-      if (team.status !== 'eliminated') {
-        this._assignNextPuzzle(team.id);
-      }
-    });
+  requestHint(teamId) {
+    const team = this.state.teams[teamId];
+    if (!team || team.status !== "active") {
+      return { success: false, error: "Team not active" };
+    }
+    if (team.tokens < 1) {
+      return { success: false, error: "Not enough tokens (costs 1)" };
+    }
+    const puzzle = team.currentPuzzle;
+    if (!puzzle || !puzzle.hint) {
+      return { success: false, error: "No hint available" };
+    }
 
-    this._addToLog("neutral", `Round advanced to ${this.state.round}`, []);
+    team.tokens -= 1;
+    team.tokenHistory.push({ timestamp: Date.now(), amount: -1, reason: "used hint" });
+    
+    const taunt = TAUNTS.HINT[Math.floor(Math.random() * TAUNTS.HINT.length)];
+    team.lastTaunt = taunt;
+    this._addToLog("neutral", `${team.displayName} BOUGHT A HINT (-1 TOKEN). ${taunt}`, [teamId]);
     this.broadcastState();
+    return { success: true, hint: puzzle.hint };
   }
 
   advancePhase(phaseOverride) {
     if (phaseOverride) {
       this.state.phase = phaseOverride;
-    } else {
-      this.state.phase = RoundManager.getNextPhase(this.state.phase);
     }
-    
     this._addToLog("neutral", `Phase advanced to ${this.state.phase.toUpperCase()}`, []);
+    this.broadcastState();
+  }
 
-    if (this.state.phase === 'sudden_death') {
-      this._handleSuddenDeath();
+  startGame(durationSeconds) {
+    if (this.state.gameStarted) return;
+    
+    this.state.gameStarted = true;
+    this.state.phase = "active";
+    
+    // Assign initial puzzles to all teams
+    Object.values(this.state.teams).forEach(team => {
+      if (!team.currentPuzzle) this._assignNextPuzzle(team.id);
+    });
+
+    this._addToLog("neutral", "⚔ MISSION COMMENCED — ALL GLADIATORS ENGAGE", []);
+    this.broadcastState();
+  }
+
+  stopGame() {
+    if (this.gameInterval) {
+      clearInterval(this.gameInterval);
+      this.gameInterval = null;
     }
-
+    this.state.gameStarted = false;
+    this.state.phase = "ENDED";
+    this._addToLog("neutral", "MISSION COMPLETE: TERMINAL DEACTIVATED", []);
     this.broadcastState();
   }
 
@@ -276,7 +357,7 @@ export class GameRoom {
   grantTokens(teamId, amount, reason = "admin grant") {
     const team = this.state.teams[teamId];
     if (team) {
-      team.tokens += amount;
+      team.tokens = Math.max(0, team.tokens + amount);
       team.tokenHistory.push({ timestamp: Date.now(), amount, reason });
     }
   }
@@ -312,10 +393,24 @@ export class GameRoom {
 
   _assignNextPuzzle(teamId) {
     const team = this.state.teams[teamId];
-    const config = RoundManager.getConfigForRound(this.state.round);
-    const puzzle = this.puzzleManager.getRandomPuzzle(config.difficulty, "main", team.solvedPuzzleIds);
-    // Attach to team object (simplifying instead of a database)
-    team.currentPuzzle = puzzle;
+    if (!team) return null;
+
+    if (!team.displayedPuzzleIds) team.displayedPuzzleIds = [];
+
+    // Filter out puzzles already displayed to this player
+    let puzzle = this.puzzleManager.getRandomPuzzle("ANY", null, team.displayedPuzzleIds);
+
+    // If all puzzles have been displayed, reset the tracking and pick any
+    if (!puzzle) {
+      team.displayedPuzzleIds = [];
+      puzzle = this.puzzleManager.getRandomPuzzle("ANY", null, []);
+    }
+
+    if (puzzle) {
+      team.displayedPuzzleIds.push(puzzle.id);
+      team.currentPuzzle = puzzle;
+    }
+
     return puzzle;
   }
 }

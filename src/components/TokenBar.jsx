@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 
-export default function TokenBar({ tokens, onAttack, onShield }) {
+export default function TokenBar({ tokens }) {
   const [pulse, setPulse] = useState(false);
   const prevTokens = useRef(tokens);
 
@@ -28,38 +28,6 @@ export default function TokenBar({ tokens, onAttack, onShield }) {
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-        <button 
-          onClick={onAttack}
-          disabled={tokens < 5}
-          className="mono uppercase text-danger"
-          style={{
-            padding: '12px',
-            border: '1px solid var(--color-danger)',
-            fontSize: '12px',
-            textAlign: 'left',
-            transition: 'background-color 0.2s',
-          }}
-          onMouseEnter={(e) => !e.currentTarget.disabled && (e.currentTarget.style.backgroundColor = 'var(--color-danger-hover)')}
-          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-        >
-          [LAUNCH ATTACK — 5 ⬡]
-        </button>
-        <button 
-          onClick={onShield}
-          disabled={tokens < 3}
-          className="mono uppercase text-secondary"
-          style={{
-            padding: '12px',
-            border: '1px solid var(--color-border)',
-            fontSize: '12px',
-            textAlign: 'left',
-            transition: 'background-color 0.2s',
-          }}
-          onMouseEnter={(e) => !e.currentTarget.disabled && (e.currentTarget.style.backgroundColor = 'var(--color-surface-raised)')}
-          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-        >
-          [ACTIVATE SHIELD — 3 ⬡]
-        </button>
       </div>
 
       <style>{`

@@ -1,7 +1,8 @@
 import { useEffect } from 'react';
 import { io } from 'socket.io-client';
 
-export const socket = io("http://localhost:3001", { autoConnect: false });
+const SOCKET_URL = import.meta.env.VITE_BACKEND_URL || "http://127.0.0.1:3001";
+export const socket = io(SOCKET_URL, { autoConnect: false });
 
 export default function useSocket(onStateUpdate, onAttackIncoming, onAttackResolved, onRoomError) {
   useEffect(() => {

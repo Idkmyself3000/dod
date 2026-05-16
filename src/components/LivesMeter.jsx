@@ -1,19 +1,18 @@
 import React from 'react';
 
 export default function LivesMeter({ lives, max = 3 }) {
+  const isCritical = lives === 1;
+
   return (
-    <div style={{ display: 'flex', gap: '4px' }}>
+    <div className="lives-meter">
       {[...Array(max)].map((_, i) => {
         const isFilled = i < lives;
-        return (
-          <span key={i} style={{
-            color: isFilled ? 'var(--color-primary)' : 'var(--color-text-muted)',
-            fontSize: '14px',
-            lineHeight: 1
-          }}>
-            {isFilled ? '●' : '○'}
-          </span>
-        );
+        
+        let className = 'pixel-heart';
+        if (!isFilled) className += ' empty';
+        else if (isCritical) className += ' critical';
+
+        return <div key={i} className={className} />;
       })}
     </div>
   );
