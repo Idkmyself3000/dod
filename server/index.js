@@ -14,18 +14,23 @@ const httpServer = createServer(app);
 const FRONTEND_URL = process.env.FRONTEND_URL || '*';
 
 app.use(cors({ 
-  origin: FRONTEND_URL === '*' ? true : FRONTEND_URL,
+  origin: (origin, callback) => {
+    // Dynamically allow the connecting origin
+    callback(null, origin || true);
+  },
   credentials: true 
 }));
 app.use(express.json());
 
 const io = new Server(httpServer, {
   cors: {
-    origin: FRONTEND_URL === '*' ? true : FRONTEND_URL,
+    origin: (origin, callback) => {
+      callback(null, origin || true);
+    },
     methods: ["GET", "POST"],
     credentials: true
   },
-  allowEIO3: true // Support older clients if needed
+  allowEIO3: true
 });
 
 const rooms = new Map();
