@@ -11,16 +11,16 @@ dotenv.config();
 const app = express();
 const httpServer = createServer(app);
 
-const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
-const allowedOrigins = [FRONTEND_URL, 'http://localhost:5173', 'http://127.0.0.1:5173'];
+const FRONTEND_URL = process.env.FRONTEND_URL || '*';
 
-app.use(cors({ origin: '*' }));
+app.use(cors({ origin: FRONTEND_URL }));
 app.use(express.json());
 
 const io = new Server(httpServer, {
   cors: {
-    origin: '*',
-    methods: ["GET", "POST"]
+    origin: FRONTEND_URL,
+    methods: ["GET", "POST"],
+    credentials: true
   }
 });
 
@@ -39,9 +39,16 @@ function sendError(socket, code, message) {
 }
 
 io.on('connection', (socket) => {
+  console.log(`[CONNECT] New socket connected: ${socket.id}`);
+  
+  socket.on('disconnect', (reason) => {
+    console.log(`[DISCONNECT] Socket ${socket.id} disconnected: ${reason}`);
+  });
+
   // CLIENT -> SERVER EVENTS
   
   socket.on("join_room", ({ teamId, roomCode, displayName }) => {
+    console.log(`[JOIN] Team ${displayName} (${teamId}) joining room ${roomCode}`);
     try {
       const room = rooms.get(roomCode);
       if (!room) return sendError(socket, "ROOM_NOT_FOUND", "Room does not exist");
@@ -143,6 +150,7 @@ io.on('connection', (socket) => {
 
   // ORGANIZER
   socket.on("organizer_join", ({ roomCode, authKey }) => {
+    console.log(`[ORGANIZER] Admin joining room ${roomCode}`);
     try {
       // Bypassed auth check for local MVP
       const room = rooms.get(roomCode);
@@ -156,6 +164,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on("organizer_cmd", ({ roomCode, authKey, command, payload }) => {
+    console.log(`[CMD] Organizer cmd in ${roomCode}: ${command}`);
     try {
       // Bypassed auth check for local MVP
       const room = rooms.get(roomCode);
@@ -206,6 +215,15 @@ app.get('/', (req, res) => {
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', activeRooms: rooms.size });
+});
+
+app.post('/api/rooms/create', (req, res) => {
+  const roomCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+  const newRoom = new GameRoom(roomCode);
+  newRoom.setIO(io);
+  rooms.set(roomCode, newRoom);
+  console.log(`[ROOM] Created new room: ${roomCode}`);
+  res.json({ roomCode });
 });
 
 const PORT = process.env.PORT || 3001;
